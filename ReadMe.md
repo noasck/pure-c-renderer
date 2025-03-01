@@ -12,7 +12,6 @@ Let's see if we can beat `tinygl:_)`
 Nuklear UI + 2 free models, no texturing.
 
 
-<image>
 ![image](https://github.com/user-attachments/assets/31263b14-588b-4301-a1af-bd9109dfa2b4)
 
 primitive baricentric coords rasterizer in 1920x1080
