@@ -11,3 +11,7 @@ all:
 
 clean:
 	rm -f $(OUT)
+
+profile_setup:
+	sudo sh -c "echo -1 | sudo tee /proc/sys/kernel/perf_event_paranoid"
+	sudo sh -c "echo 0 | sudo tee /proc/sys/kernel/kptr_restrict"
