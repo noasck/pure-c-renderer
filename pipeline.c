@@ -100,52 +100,46 @@ fast_ceilf ( float x )
 }
 
 void
-draw_line_edgef ( float x0,
-                  float y0,
-                  float x1,
-                  float y1,
-                  int * l_x,
-                  int * r_x,
-                  int   min_y,
-                  int   max_y,
-                  int   min_x,
-                  int   max_x )
+draw_edgef ( float x0,
+             float y0,
+             float x1,
+             float y1,
+             int * l_x,
+             int * r_x,
+             int   min_y,
+             int   max_y,
+             int   min_x,
+             int   max_x )
 {
-
-    float dx = x1 - x0;
-    float dy = y1 - y0;
-
-    int steps = ( fmax ( floor ( fmax ( ( y0 ), ( y1 ) ) ) -
-                             ceil ( fmin ( ( y0 ), ( y1 ) ) ) + 1,
-                         0 ) ) +
-                1;
-    // int steps = ( fabsf ( dx ) > fabsf ( dy ) ? fabsf ( dx ) : fabsf ( dy )
-    // );
-
-    float x_inc = dx / steps;
-    float y_inc = dy / steps;
-
-    float x = x0;
-    float y = y0;
-
-    for ( int i = 0; i <= steps; i++ )
+    if ( y0 > y1 )
     {
-        int iy = ( int ) ( y );
-        int ix = ( int ) ( x );
+        float tx = x0, ty = y0;
+        x0 = x1;
+        y0 = y1;
+        x1 = tx;
+        y1 = ty;
+    }
 
-        if ( iy >= min_y && iy <= max_y )
-        {
-            if ( l_x[ iy ] == max_x + 1 || r_x[ iy ] == max_x + 1 )
-            {
-                l_x[ iy ] = ix;
-                r_x[ iy ] = ix;
-            }
-            else if ( l_x[ iy ] > ix ) { l_x[ iy ] = ix; }
-            else if ( r_x[ iy ] < ix ) { r_x[ iy ] = ix; }
-        }
+    float dy = y1 - y0;
+    if ( dy == 0.0f ) return;
 
-        x += x_inc;
-        y += y_inc;
+    float dx      = ( x1 - x0 ) / dy;
+    int   y_start = ( int ) ceilf ( y0 );
+    int   y_end   = ( int ) floorf ( y1 );
+    if ( y_end < min_y || y_start > max_y ) return;
+
+    if ( y_start < min_y ) y_start = min_y;
+    if ( y_end > max_y ) y_end = max_y;
+
+    float x = x0 + dx * ( y_start - y0 );
+    for ( int y = y_start; y <= y_end; y++ )
+    {
+        int xi = ( int ) ( x + 0.5f );
+        if ( xi < min_x ) xi = min_x;
+        if ( xi > max_x ) xi = max_x;
+        if ( xi < l_x[ y ] ) l_x[ y ] = xi;
+        if ( xi > r_x[ y ] ) r_x[ y ] = xi;
+        x += dx;
     }
 }
 
@@ -200,15 +194,12 @@ rasterize ( Framebuffer * f, vec3 * v, vec4 * c )
     {
         // fill with sentinel value:
         f->min_x[ i ] = xmax + 1;
-        f->max_x[ i ] = xmax + 1;
+        f->max_x[ i ] = xmin - 1;
     }
 
-    draw_line_edgef (
-        X1, Y1, X2, Y2, f->min_x, f->max_x, ymin, ymax, xmin, xmax );
-    draw_line_edgef (
-        X2, Y2, X3, Y3, f->min_x, f->max_x, ymin, ymax, xmin, xmax );
-    draw_line_edgef (
-        X3, Y3, X1, Y1, f->min_x, f->max_x, ymin, ymax, xmin, xmax );
+    draw_edgef ( X1, Y1, X2, Y2, f->min_x, f->max_x, ymin, ymax, xmin, xmax );
+    draw_edgef ( X2, Y2, X3, Y3, f->min_x, f->max_x, ymin, ymax, xmin, xmax );
+    draw_edgef ( X3, Y3, X1, Y1, f->min_x, f->max_x, ymin, ymax, xmin, xmax );
 
     DBuffer ** faint_ll;
     vec4 *     curr_c;
@@ -219,34 +210,38 @@ rasterize ( Framebuffer * f, vec3 * v, vec4 * c )
 
     denom = ( X1 - X3 ) * ( Y2 - Y3 ) - ( X2 - X3 ) * ( Y1 - Y3 );
 
-    // if ( fabsf ( ( float ) denom ) < 1e-6 ) return; /* Degenerate */
+    if ( fabsf ( ( float ) denom ) < 1e-6 ) return; /* Degenerate */
 
-    float dw1x    = ( Y2 - Y3 );
-    float dw2x    = ( Y3 - Y1 );
-    float y2sy3   = ( Y2 - Y3 );
-    float y3sy1   = ( Y3 - Y1 );
-    float x3sx2   = ( X3 - X2 );
-    float x1sx3   = ( X1 - X3 );
-    float xminsx3 = ( -1.0f - X3 );
+    float dw1x  = ( Y2 - Y3 );
+    float dw2x  = ( Y3 - Y1 );
+    float dw3x  = -dw1x - dw2x;
+    float y2sy3 = ( Y2 - Y3 );
+    float y3sy1 = ( Y3 - Y1 );
+    float x3sx2 = ( X3 - X2 );
+    float x1sx3 = ( X1 - X3 );
+
     // int   dypx    = f->surface->w - ( xmax - xmin + 1 );
     for ( int py = ymin; py <= ymax; py++ )
     {
         int l_x = f->min_x[ py ], r_x = f->max_x[ py ];
-        if ( l_x > xmax ) continue;
         /* go to current row */
-        w1 = ( y2sy3 * ( xminsx3 + l_x ) + ( x3sx2 ) * ( py - Y3 ) );
-        w2 = ( ( y3sy1 ) * ( xminsx3 + l_x ) + ( x1sx3 ) * ( py - Y3 ) );
+        float fx = ( l_x + 0.5f ) - X3;
+        float fy = ( py + 0.5f ) - Y3;
+
+        w1 = y2sy3 * fx + x3sx2 * fy;
+        w2 = y3sy1 * fx + x1sx3 * fy;
+        w3 = denom - w1 - w2;
 
         faint_ll = ( f->transparent + ( py * f->surface->w ) + l_x );
         curr_c   = ( f->opaque_c + ( py * f->surface->w ) + l_x );
         curr_z   = ( f->opaque_z + ( py * f->surface->w ) + l_x );
 
-        // for ( int px = xmin; px <= xmax; px++ )
         for ( int px = l_x; px <= r_x; px++ )
         {
-            w1 += dw1x;
-            w2 += dw2x;
-            w3 = denom - w1 - w2;
+            if ( w1 < 0 || w2 < 0 || w3 < 0 )
+            {
+                goto l_next_pixel;
+            }
 
             float z_px = ( w1 * Z1 + w2 * Z2 + w3 * Z3 ) / denom;
 
@@ -288,6 +283,10 @@ rasterize ( Framebuffer * f, vec3 * v, vec4 * c )
             }
 
         l_next_pixel:
+            w1 += dw1x;
+            w2 += dw2x;
+            w3 += dw3x;
+
             faint_ll++;
             curr_c++;
             curr_z++;
