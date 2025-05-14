@@ -101,6 +101,9 @@ createFramebuffer ( uint32_t h, uint32_t w )
     f->pool = NULL;
     cleanFramebuffer ( f );
 
+    U_ALLOC ( f->min_x, int, h );
+    U_ALLOC ( f->max_x, int, h );
+
     f->pool = createDBufferPool ( h * w );
     if ( ! f->pool )
     {
@@ -119,6 +122,9 @@ destroyFramebuffer ( Framebuffer * f )
         if ( f->transparent ) free ( f->transparent );
         if ( f->opaque_z ) free ( f->opaque_z );
         if ( f->opaque_c ) free ( f->opaque_c );
+        if ( f->min_x ) free ( f->min_x );
+        if ( f->max_x ) free ( f->max_x );
+
         destroyDBufferPool ( f->pool );
         if ( f->surface )
         {

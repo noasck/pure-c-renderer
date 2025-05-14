@@ -1,6 +1,6 @@
 CC = clang
 CSTYLE = -Wno-gnu-offsetof-extensions
-CFLAGS = -Wall -g -O1 -Wextra -pedantic -std=c99 -L/usr/local/lib -lcglm #-fsanitize=address
+CFLAGS = -Wall -g -O2 -Wextra -pedantic -std=c99 -L/usr/local/lib -lcglm #-fsanitize=address
 LDFLAGS = -lSDL2 -lm
 
 SRC = main.c engine.c pipeline.c

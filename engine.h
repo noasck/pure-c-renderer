@@ -71,6 +71,11 @@ typedef struct Framebuffer
 {
     SDL_Surface * surface;
 
+    // left bound of current triangle scanline
+    int * min_x;
+    // right bound
+    int * max_x;
+
     /* 22.02.25 ::: Converted opaque DBuffer AOS -> SOA */
     DBuffer ** transparent;
     vec4 *     opaque_c;
