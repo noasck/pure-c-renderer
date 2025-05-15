@@ -75,8 +75,9 @@ $;::::::;+X;:;:::::;$&X&x;;;+&&&&&&&&+;X&$&;;+$;::::::;X$;::::;;&X
 
 #define CPI 3.14159265358979323846f
 
-int an_x = 20;
-int an_z = 20;
+int an_x      = 20;
+int an_z      = 20;
+int triangles = 0;
 
 static int
 sdl_button_to_nk ( int button )
@@ -138,6 +139,8 @@ defaultShader ( RObject * o, Engine * e )
     vec4  v4;
     vec3  v[ 3 ];
     // TODO : Handle SHAPES
+
+    triangles = 0;
     for ( uint32_t nfc = 0; nfc < o->attrib.num_face_num_verts; nfc++ )
     {
         int face_cnt   = o->attrib.face_num_verts[ nfc ];
@@ -189,7 +192,11 @@ defaultShader ( RObject * o, Engine * e )
             glm_vec3_cross ( v1, v2, normal );
             float dot_product = glm_vec3_dot ( normal, view_dir );
 
-            if ( dot_product > 0 ) { rasterize ( e->framebuffer, v, c ); }
+            if ( dot_product > 0 )
+            {
+                triangles++;
+                rasterize ( e->framebuffer, v, c );
+            }
         }
     next_face:
         face_offset += face_cnt;
@@ -199,10 +206,11 @@ defaultShader ( RObject * o, Engine * e )
 int
 main ( void )
 {
-    //  RObject * seahawk_ro = loadRObject (
-    //      "treeDecorated.obj" );
+   // RObject * seahawk_ro = loadRObject (
+   //     "/mydata/Notebooks/c_learn/graphics/pure_c_render/models/xmax_tree/"
+   //     "tree.obj" );
 
-    RObject * seahawk_ro    = loadRObject ( "models/Seahawk.obj" );
+     RObject * seahawk_ro    = loadRObject ( "models/Seahawk.obj" );
     seahawk_ro->center[ 0 ] = 0.0119630;
     seahawk_ro->center[ 1 ] = 31.758559;
     seahawk_ro->center[ 2 ] = 0.9221725;
@@ -336,6 +344,9 @@ main ( void )
         // defaultShader ( seahawk_ro2, &E );
         merge ( E.framebuffer );
 
+        char triangles_str[ 100 ];
+        sprintf ( triangles_str, "%d", triangles );
+
         /* Nuklear UI devfinition */
         nk_input_end ( pNK_CTX );
         if ( E.godmod )
@@ -352,6 +363,10 @@ main ( void )
                 nk_layout_row_dynamic ( pNK_CTX, 45, 2 );
                 nk_label ( pNK_CTX, "fps:", NK_TEXT_LEFT );
                 nk_label ( pNK_CTX, fps_str, NK_TEXT_RIGHT );
+                nk_layout_row_dynamic ( pNK_CTX, 45, 2 );
+                nk_label ( pNK_CTX, "triangles:", NK_TEXT_LEFT );
+                nk_label ( pNK_CTX, triangles_str, NK_TEXT_RIGHT );
+
                 nk_layout_row_dynamic ( pNK_CTX, 45, 1 );
                 nk_label ( pNK_CTX, "scale:", NK_TEXT_LEFT );
                 nk_layout_row_dynamic ( pNK_CTX, 45, 1 );

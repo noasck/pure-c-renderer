@@ -168,23 +168,6 @@ rasterize ( Framebuffer * f, vec3 * v, vec4 * c )
 #define FREAK_CMP <=
     /* 03.01.25 ::: NOTE ::: Trying to reduce aliasing: < . */
 
-    //#define MAX( a, b, c )                                  \
-//    ( ( a ) > ( b ) ? ( ( a ) > ( c ) ? ( a ) : ( c ) ) \
-//                    : ( ( b ) > ( c ) ? ( b ) : ( c ) ) )
-    //#define MIN( a, b, c )                                  \
-//    ( ( a ) < ( b ) ? ( ( a ) < ( c ) ? ( a ) : ( c ) ) \
-//                    : ( ( b ) < ( c ) ? ( b ) : ( c ) ) )
-    //#define CLIP( val, min, max )     \
-//    ( ( val ) < ( min ) ? ( min ) \
-//                        : ( ( val ) > ( max ) ? ( max ) : ( val ) ) )
-    //
-    //   uint32_t xmin, xmax, ymin, ymax;
-    //    xmin = ( uint32_t ) CLIP ( MIN ( X1, X2, X3 ), 0, f->surface->w - 1
-    //    ); ymin = ( uint32_t ) CLIP ( MIN ( Y1, Y2, Y3 ), 0, f->surface->h -
-    //    1 ); xmax = ( uint32_t ) CLIP ( MAX ( X1, X2, X3 ), 0, f->surface->w
-    //    - 1 ); ymax = ( uint32_t ) CLIP ( MAX ( Y1, Y2, Y3 ), 0,
-    //    f->surface->h - 1 );
-
     int xmin = ( int ) fast_floorf ( min3 ( X1, X2, X3 ) );
     int ymin = ( int ) fast_floorf ( min3 ( Y1, Y2, Y3 ) );
     int xmax = ( int ) fast_ceilf ( max3 ( X1, X2, X3 ) );
@@ -220,7 +203,6 @@ rasterize ( Framebuffer * f, vec3 * v, vec4 * c )
     float x3sx2 = ( X3 - X2 );
     float x1sx3 = ( X1 - X3 );
 
-    // int   dypx    = f->surface->w - ( xmax - xmin + 1 );
     for ( int py = ymin; py <= ymax; py++ )
     {
         int l_x = f->min_x[ py ], r_x = f->max_x[ py ];
@@ -238,10 +220,7 @@ rasterize ( Framebuffer * f, vec3 * v, vec4 * c )
 
         for ( int px = l_x; px <= r_x; px++ )
         {
-            if ( w1 < 0 || w2 < 0 || w3 < 0 )
-            {
-                goto l_next_pixel;
-            }
+            if ( w1 < 0 || w2 < 0 || w3 < 0 ) { goto l_next_pixel; }
 
             float z_px = ( w1 * Z1 + w2 * Z2 + w3 * Z3 ) / denom;
 
@@ -291,9 +270,6 @@ rasterize ( Framebuffer * f, vec3 * v, vec4 * c )
             curr_c++;
             curr_z++;
         }
-        //    faint_ll += dypx;
-        //    curr_c += dypx;
-        //    curr_z += dypx;
     }
 }
 
