@@ -51,8 +51,8 @@ typedef struct
 
 typedef struct DBuffer
 {
-    vec4  color;
-    float z;
+    vec4     color;
+    uint64_t z;
 
     struct DBuffer * next;
 } DBuffer;
@@ -79,7 +79,7 @@ typedef struct Framebuffer
     /* 22.02.25 ::: Converted opaque DBuffer AOS -> SOA */
     DBuffer ** transparent;
     vec4 *     opaque_c;
-    float *    opaque_z;
+    uint64_t * opaque_z;
 
     DBufferPool * pool;
 } Framebuffer;
@@ -153,6 +153,10 @@ typedef struct
     size_t               num_shapes;
     tinyobj_material_t * materials;
     size_t               num_materials;
+
+    /* SOA for vertices after projection applied */
+    vec3 * v;
+    int    v_cnt;
 
     /* 0 - obj file ptr;
      * 1 - mtl file ptr

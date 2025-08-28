@@ -18,7 +18,7 @@ createDBufferPool ( uint32_t size )
     for ( uint32_t i = 0; i < size; i++ )
     {
         glm_vec4_zero ( p->nodes[ i ].color );
-        p->nodes[ i ].z    = -FLT_MAX;
+        p->nodes[ i ].z    = 0;
         p->nodes[ i ].next = NULL;
     }
 
@@ -56,10 +56,11 @@ destroyDBufferPool ( DBufferPool * p )
 void
 cleanFramebuffer ( Framebuffer * f )
 {
-    vec4 *         c      = f->opaque_c;
-    float *        z      = f->opaque_z;
-    DBuffer **     t      = f->transparent;
-    uint32_t *     s_px   = f->surface->pixels;
+    vec4 *     c    = f->opaque_c;
+    uint64_t * z    = f->opaque_z;
+    DBuffer ** t    = f->transparent;
+    uint32_t * s_px = f->surface->pixels;
+
     const uint32_t px_cnt = f->surface->h * f->surface->w;
 
     memset ( s_px, 0, px_cnt * sizeof ( uint32_t ) );
@@ -68,7 +69,7 @@ cleanFramebuffer ( Framebuffer * f )
     for ( uint32_t i = 0; i < px_cnt; i = i + 1 )
     {
         glm_vec4_zero ( *( c++ ) );
-        *( z++ ) = -FLT_MAX;
+        *( z++ ) = 0;
     }
 
     if ( f->pool )
@@ -97,7 +98,7 @@ createFramebuffer ( uint32_t h, uint32_t w )
     typedef DBuffer * dbuffer_ptr_t;
     U_ALLOC ( f->transparent, dbuffer_ptr_t, h * w );
     U_ALLOC ( f->opaque_c, vec4, h * w );
-    U_ALLOC ( f->opaque_z, float, h * w );
+    U_ALLOC ( f->opaque_z, uint64_t, h * w );
     f->pool = NULL;
     cleanFramebuffer ( f );
 
@@ -271,6 +272,7 @@ file_reader ( void *       ctx,
     o->pTempFileBuf[ ( is_mtl ? 1 : 0 ) ] = *buf;
 
     if ( *buf ) { fread ( *buf, 1, *len, file ); }
+
     fclose ( file );
 }
 
@@ -325,6 +327,13 @@ loadRObject ( const char * objPath )
         if ( max_z < z ) max_z = z;
     }
 
+    int max_vert_cnt = 0;
+    for ( uint32_t nfc = 0; nfc < o->attrib.num_face_num_verts; nfc++ )
+    {
+        max_vert_cnt += o->attrib.face_num_verts[ nfc ];
+    }
+
+    printf ( "max number of vertices: %d\n", max_vert_cnt );
     printf ( "min_x: %f, max_x: %f\n", min_x, max_x );
     printf ( "min_y: %f, max_y: %f\n", min_y, max_y );
     printf ( "min_z: %f, max_z: %f\n", min_z, max_z );
@@ -333,6 +342,9 @@ loadRObject ( const char * objPath )
     o->center[ 0 ] = ( min_x + max_x ) / 2;
     o->center[ 1 ] = ( min_y + max_y ) / 2;
     o->center[ 2 ] = ( min_z + max_z ) / 2;
+
+    U_ALLOC ( o->v, float, ( max_vert_cnt + 1 ) * 3 );
+    o->v_cnt = 0;
 
     glm_vec3_one ( o->scale );
     glm_quat_identity ( o->quaternion );

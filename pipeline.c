@@ -137,25 +137,28 @@ draw_edgef ( float x0,
         int xi = ( int ) ( x + 0.5f );
         if ( xi < min_x ) xi = min_x;
         if ( xi > max_x ) xi = max_x;
-        if ( xi < l_x[ y ] ) l_x[ y ] = xi;
-        if ( xi > r_x[ y ] ) r_x[ y ] = xi;
+        if ( xi <= l_x[ y ] ) l_x[ y ] = xi;
+        if ( xi >= r_x[ y ] ) r_x[ y ] = xi;
         x += dx;
     }
 }
 
 void
-rasterize ( Framebuffer * f, vec3 * v, vec4 * c )
+rasterize ( Framebuffer * f, vec3 * v, uint64_t * zi, vec4 * c )
 {
 
-#define X1 v[ 0 ][ 0 ]
-#define X2 v[ 1 ][ 0 ]
-#define X3 v[ 2 ][ 0 ]
-#define Y1 v[ 0 ][ 1 ]
-#define Y2 v[ 1 ][ 1 ]
-#define Y3 v[ 2 ][ 1 ]
-#define Z1 v[ 0 ][ 2 ]
-#define Z2 v[ 1 ][ 2 ]
-#define Z3 v[ 2 ][ 2 ]
+#define X1  v[ 0 ][ 0 ]
+#define X2  v[ 1 ][ 0 ]
+#define X3  v[ 2 ][ 0 ]
+#define Y1  v[ 0 ][ 1 ]
+#define Y2  v[ 1 ][ 1 ]
+#define Y3  v[ 2 ][ 1 ]
+#define Z1  v[ 0 ][ 2 ]
+#define Z2  v[ 1 ][ 2 ]
+#define Z3  v[ 2 ][ 2 ]
+#define ZI1 zi[ 0 ]
+#define ZI2 zi[ 1 ]
+#define ZI3 zi[ 2 ]
 
     if ( X1 < 0 || X2 < 0 || X3 < 0 || Y1 < 0 || Y2 < 0 || Y3 < 0 ||
          X1 > f->surface->w - 1 || X2 > f->surface->w - 1 ||
@@ -186,7 +189,7 @@ rasterize ( Framebuffer * f, vec3 * v, vec4 * c )
 
     DBuffer ** faint_ll;
     vec4 *     curr_c;
-    float *    curr_z;
+    uint64_t * curr_z;
 
     vec4  ctemp;
     float denom, w1, w2, w3;
@@ -222,7 +225,9 @@ rasterize ( Framebuffer * f, vec3 * v, vec4 * c )
         {
             if ( w1 < 0 || w2 < 0 || w3 < 0 ) { goto l_next_pixel; }
 
-            float z_px = ( w1 * Z1 + w2 * Z2 + w3 * Z3 ) / denom;
+            uint64_t z_px = ( w1 * ( float ) ZI1 + w2 * ( float ) ZI2 +
+                              w3 * ( float ) ZI3 ) /
+                            denom;
 
             vec4 cpx;
             glm_vec4_scale ( c[ 0 ], w1, cpx );
@@ -232,33 +237,32 @@ rasterize ( Framebuffer * f, vec3 * v, vec4 * c )
             glm_vec4_add ( cpx, ctemp, cpx );
             glm_vec4_divs ( cpx, denom, cpx );
 
-            if ( z_px >= *curr_z )
-            {
-                if ( cpx[ ALPHA_IDX ] >= OPAQUE_THRSHD )
-                {
-                    glm_vec4_copy ( cpx, *curr_c );
-                    *curr_z = z_px;
-                }
-                else
-                {
-                    DBuffer * newBuf = getAuxDBuffer ( f );
-                    glm_vec4_copy ( cpx, newBuf->color );
-                    newBuf->z    = z_px;
-                    newBuf->next = NULL;
+            if ( z_px < *curr_z ) goto l_next_pixel;
 
-                    if ( ! ( *faint_ll ) )
-                    {
-                        ( *faint_ll ) = newBuf;
-                        goto l_next_pixel;
-                    }
-                    while ( ( *faint_ll )->next &&
-                            ( *faint_ll )->next->z >= z_px )
-                    {
-                        ( *faint_ll ) = ( *faint_ll )->next;
-                    }
-                    newBuf->next        = ( *faint_ll )->next;
-                    ( *faint_ll )->next = newBuf;
+            if ( cpx[ ALPHA_IDX ] >= OPAQUE_THRSHD )
+            {
+                glm_vec4_copy ( cpx, *curr_c );
+                *curr_z = z_px;
+            }
+            else
+            {
+                DBuffer * newBuf = getAuxDBuffer ( f );
+                glm_vec4_copy ( cpx, newBuf->color );
+                newBuf->z    = z_px;
+                newBuf->next = NULL;
+
+                if ( ! ( *faint_ll ) )
+                {
+                    ( *faint_ll ) = newBuf;
+                    goto l_next_pixel;
                 }
+                while ( ( *faint_ll )->next &&
+                        ( *faint_ll )->next->z >= z_px )
+                {
+                    ( *faint_ll ) = ( *faint_ll )->next;
+                }
+                newBuf->next        = ( *faint_ll )->next;
+                ( *faint_ll )->next = newBuf;
             }
 
         l_next_pixel:

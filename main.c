@@ -6,6 +6,7 @@
 #include <SDL2/SDL_keyboard.h>
 #include <SDL2/SDL_mouse.h>
 #include <cglm/cglm.h>
+#include <limits.h>
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
@@ -75,9 +76,8 @@ $;::::::;+X;:;:::::;$&X&x;;;+&&&&&&&&+;X&$&;;+$;::::::;X$;::::;;&X
 
 #define CPI 3.14159265358979323846f
 
-int an_x      = 20;
-int an_z      = 20;
-int triangles = 0;
+int an_x = 20;
+int an_z = 20;
 
 static int
 sdl_button_to_nk ( int button )
@@ -140,7 +140,7 @@ defaultShader ( RObject * o, Engine * e )
     vec3  v[ 3 ];
     // TODO : Handle SHAPES
 
-    triangles = 0;
+    o->v_cnt = 0;
     for ( uint32_t nfc = 0; nfc < o->attrib.num_face_num_verts; nfc++ )
     {
         int face_cnt   = o->attrib.face_num_verts[ nfc ];
@@ -194,23 +194,51 @@ defaultShader ( RObject * o, Engine * e )
 
             if ( dot_product > 0 )
             {
-                triangles++;
-                rasterize ( e->framebuffer, v, c );
+                o->v_cnt += 3;
+
+                glm_vec3_copy ( v[ 2 ], o->v[ o->v_cnt - 1 ] );
+                glm_vec3_copy ( v[ 1 ], o->v[ o->v_cnt - 2 ] );
+                glm_vec3_copy ( v[ 0 ], o->v[ o->v_cnt - 3 ] );
+
+                //rasterize ( e->framebuffer, v, c );
             }
         }
     next_face:
         face_offset += face_cnt;
+    }
+
+    double min_z = o->v[ 0 ][ 0 ];
+    double max_z = o->v[ 0 ][ 0 ];
+    for ( int i = 0; i < o->v_cnt; i++ )
+    {
+        if ( o->v[ i ][ 2 ] < min_z ) min_z = o->v[ i ][ 2 ];
+        if ( o->v[ i ][ 2 ] > max_z ) max_z = o->v[ i ][ 2 ];
+    }
+
+    for ( int i = 0; i < o->v_cnt; i += 3 )
+    {
+
+        uint64_t z_int[ 3 ];
+
+        for ( int j = 0; j < 3; j++ )
+        {
+            z_int[ j ] = ( ( ( double ) o->v[ i + j ][ 2 ] - min_z ) /
+                           ( max_z * 1.001 ) ) *
+                             ( ( double ) UINT64_MAX - 1 ) +
+                         1;
+        }
+        rasterize ( e->framebuffer, ( o->v ) + i, z_int, c );
     }
 }
 
 int
 main ( void )
 {
-   // RObject * seahawk_ro = loadRObject (
-   //     "/mydata/Notebooks/c_learn/graphics/pure_c_render/models/xmax_tree/"
-   //     "tree.obj" );
+    // RObject * seahawk_ro = loadRObject (
+    //     "/mydata/Notebooks/c_learn/graphics/pure_c_render/models/xmax_tree/"
+    //     "tree.obj" );
 
-     RObject * seahawk_ro    = loadRObject ( "models/Seahawk.obj" );
+    RObject * seahawk_ro    = loadRObject ( "models/Seahawk.obj" );
     seahawk_ro->center[ 0 ] = 0.0119630;
     seahawk_ro->center[ 1 ] = 31.758559;
     seahawk_ro->center[ 2 ] = 0.9221725;
@@ -345,7 +373,7 @@ main ( void )
         merge ( E.framebuffer );
 
         char triangles_str[ 100 ];
-        sprintf ( triangles_str, "%d", triangles );
+        sprintf ( triangles_str, "%d", seahawk_ro->v_cnt / 3 );
 
         /* Nuklear UI devfinition */
         nk_input_end ( pNK_CTX );

@@ -8,7 +8,6 @@
 #include <math.h>
 #include <stdint.h>
 #include <stdlib.h>
-
 #include <xmmintrin.h>
 
 typedef struct
@@ -23,7 +22,7 @@ typedef struct
 } Fragments;
 
 void
-rasterize ( Framebuffer * f, vec3 * v, vec4 * c );
+rasterize ( Framebuffer * f, vec3 * v, uint64_t * zi, vec4 * c );
 
 void
 merge ( Framebuffer * f );
