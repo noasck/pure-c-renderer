@@ -102,8 +102,14 @@ createFramebuffer ( uint32_t h, uint32_t w )
     f->pool = NULL;
     cleanFramebuffer ( f );
 
-    U_ALLOC ( f->min_x, int, h );
-    U_ALLOC ( f->max_x, int, h );
+    U_ALLOC ( f->l.x, int, h );
+    U_ALLOC ( f->r.x, int, h );
+
+    U_ALLOC ( f->l.c, vec4, h );
+    U_ALLOC ( f->r.c, vec4, h );
+
+    U_ALLOC ( f->l.zi, uint64_t, h );
+    U_ALLOC ( f->r.zi, uint64_t, h );
 
     f->pool = createDBufferPool ( h * w );
     if ( ! f->pool )
@@ -123,8 +129,12 @@ destroyFramebuffer ( Framebuffer * f )
         if ( f->transparent ) free ( f->transparent );
         if ( f->opaque_z ) free ( f->opaque_z );
         if ( f->opaque_c ) free ( f->opaque_c );
-        if ( f->min_x ) free ( f->min_x );
-        if ( f->max_x ) free ( f->max_x );
+        if ( f->l.x ) free ( f->l.x );
+        if ( f->r.x ) free ( f->r.x );
+        if ( f->l.c ) free ( f->l.c );
+        if ( f->r.c ) free ( f->r.c );
+        if ( f->l.zi ) free ( f->l.zi );
+        if ( f->r.zi ) free ( f->r.zi );
 
         destroyDBufferPool ( f->pool );
         if ( f->surface )

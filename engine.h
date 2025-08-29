@@ -67,14 +67,21 @@ typedef struct DBufferPool
     struct DBufferPool * prev;
 } DBufferPool;
 
+typedef struct Bound
+{
+    int *      x;
+    vec4 *     c;
+    uint64_t * zi;
+} Bound;
+
 typedef struct Framebuffer
 {
     SDL_Surface * surface;
 
     // left bound of current triangle scanline
-    int * min_x;
+    Bound l;
     // right bound
-    int * max_x;
+    Bound r;
 
     /* 22.02.25 ::: Converted opaque DBuffer AOS -> SOA */
     DBuffer ** transparent;
