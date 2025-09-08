@@ -54,22 +54,90 @@
 
 #define ALPHA_IDX     0
 #define OPAQUE_THRSHD 0.98
+#define EPS           1e-6f
+
+#define U8_COPY( src, dst )          \
+    do {                             \
+        ( dst )[ 0 ] = ( src )[ 0 ]; \
+        ( dst )[ 1 ] = ( src )[ 1 ]; \
+        ( dst )[ 2 ] = ( src )[ 2 ]; \
+        ( dst )[ 3 ] = ( src )[ 3 ]; \
+    } while ( 0 )
+
+#define VEC4_TO_U8( src, dst )                                    \
+    do {                                                          \
+        ( dst )[ 0 ] = ( uint8_t ) floorf ( ( src )[ 0 ] * 255 ); \
+        ( dst )[ 1 ] = ( uint8_t ) floorf ( ( src )[ 1 ] * 255 ); \
+        ( dst )[ 2 ] = ( uint8_t ) floorf ( ( src )[ 2 ] * 255 ); \
+        ( dst )[ 3 ] = ( uint8_t ) floorf ( ( src )[ 3 ] * 255 ); \
+    } while ( 0 )
+
+#define MAXF( a, b ) ( ( ( a ) > ( b ) ) ? ( a ) : ( b ) )
+#define MINF( a, b ) ( ( ( a ) < ( b ) ) ? ( a ) : ( b ) )
+
+static inline void
+draw_line ( float   x1,
+            float   y1,
+            vec4    c1,
+            float   x2,
+            float   y2,
+            vec4    c2,
+            int     dy,
+            Bound * b,
+            float ( *round ) ( float ) )
+{
+    int   r, cy;
+    float cx, dx;
+    vec4  cc, dc;
+    // we will make r steps from V1 to V2
+
+    r = floorf ( MAXF ( y1, y2 ) ) - ceilf ( MINF ( Y1, Y2 ) ) + 1;
+
+    if ( r <= 0 ) return;
+    // c = current, d = delta
+    glm_vec4_sub ( c2, c1, dc );
+    glm_vec4_divs ( dc, r, dc );
+
+    glm_vec4_copy ( c1, cc );
+
+    cy = round ( y1 );
+
+    dx = fabsf ( y2 - y1 ) > EPS ? dy * ( x2 - x1 ) / ( y2 - y1 ) : 0;
+    cx = x1 + dx * ( ( float ) round ( y1 ) - y1 );
+
+    for ( int i = 0; i < r; i++ )
+    {
+        uint8_t * c = b->c[ cy ];
+        VEC4_TO_U8 ( cc, c );
+
+        b->x[ cy ] = round ( cx );
+
+        // step
+        glm_vec4_add ( cc, dc, cc );
+        cy += dy;
+        cx += dx;
+    }
+}
 
 void
 rasterize ( Framebuffer * f, vec3 * v, uint64_t * zi, vec4 * c )
 {
 
-    if ( X1 < 0 || X2 < 0 || X3 < 0 || Y1 < 0 || Y2 < 0 || Y3 < 0 ||
-         X1 > f->surface->w - 1 || X2 > f->surface->w - 1 ||
-         X3 > f->surface->w - 1 || Y1 > f->surface->h - 1 ||
-         Y2 > f->surface->h - 1 || Y3 > f->surface->h - 1 )
+    int w = f->surface->w;
+    int h = f->surface->h;
+
+    // bounds check all three vertices: non-cool cooling
+    if ( v[ 0 ][ 0 ] < 0 || v[ 1 ][ 0 ] < 0 || v[ 2 ][ 0 ] < 0 ||
+         v[ 0 ][ 1 ] < 0 || v[ 1 ][ 1 ] < 0 || v[ 2 ][ 1 ] < 0 ||
+         v[ 0 ][ 0 ] > w - 1 || v[ 1 ][ 0 ] > w - 1 || v[ 2 ][ 0 ] > w - 1 ||
+         v[ 0 ][ 1 ] > h - 1 || v[ 1 ][ 1 ] > h - 1 || v[ 2 ][ 1 ] > h - 1 )
     {
         return;
     }
 
     int   tl = 0, lm = 0, ri = 0;
-    float ymin = Y1;
-    float xmin = X1;
+    float xmin = v[ 0 ][ 0 ];
+    float ymin = v[ 0 ][ 1 ];
 
     for ( int i = 1; i < 3; i++ )
     {
@@ -103,7 +171,7 @@ rasterize ( Framebuffer * f, vec3 * v, uint64_t * zi, vec4 * c )
         if ( i != tl && i != lm )
         {
             ri = i;
-            break
+            break;
         }
     }
 
@@ -111,121 +179,223 @@ rasterize ( Framebuffer * f, vec3 * v, uint64_t * zi, vec4 * c )
 #define Y1  v[ tl ][ 1 ]
 #define Z1  v[ tl ][ 2 ]
 #define ZI1 zi[ tl ]
+#define C1  c[ tl ]
 
 #define X2  v[ lm ][ 0 ]
 #define Y2  v[ lm ][ 1 ]
 #define Z2  v[ lm ][ 2 ]
 #define ZI2 zi[ lm ]
+#define C2  c[ lm ]
 
 #define X3  v[ ri ][ 0 ]
 #define Y3  v[ ri ][ 1 ]
 #define Z3  v[ ri ][ 2 ]
 #define ZI3 zi[ ri ]
+#define C3  c[ ri ]
+    // printf ( "+-------------------------------+\n" );
+    // printf ( "|  Tri |     X     Y     Z      |\n" );
+    // printf ( "+-------------------------------+\n" );
+    // printf ( "|  T1  | %5f %5f %5f |\n", X1, Y1, Z1 );
+    // printf ( "|  T2  | %5f %5f %5f |\n", X2, Y2, Z2 );
+    // printf ( "|  T3  | %5f %5f %5f |\n", X3, Y3, Z3 );
+    // printf ( "+-------------------------------+\n" );
+
+    //   if ( fabsf ( ( float ) ( X1 - X3 ) * ( Y2 - Y3 ) - ( X2 - X3 ) * ( Y1
+    //   - Y3 ) ) < 1e-6 ) return; /* Degenerate */
 
     /*
                        _,.-'"\ top-est, left-most
-    leftmost     _,.-'"       \  (X1, Y1, ...)
+    leftmost     _,.-'"   V1  \  (X1, Y1, ...)
  (X2, Y2...),.-'"              \
      _,.-'"                     \
-     '-._                        \
+     '-._ V2                     \
          '-._                     \
              '-._                  \
                  '-._               \
                      '-._            \
                          '-._         \
-                             '-:_      \
+                             '-:_   V3 \
                                  '-._   \
                          right       '-._)
                     (X3, Y3, Z3 ...)
       */
 
+    int   min_y = ceilf ( Y1 ), max_y = 0;
+    int   r, cy, dy;
+    float cx, dx;
+    vec4  cc, dc;
+    // we will make r steps from V1 to V2
+
+    r = floorf ( Y2 ) - ceilf ( Y1 ) + 1;
+
+    if ( r <= 0 ) goto draw_v2v3;
+    // c = current, d = delta
+    glm_vec4_sub ( C2, C1, dc );
+    glm_vec4_divs ( dc, r + 1, dc );
+
+    glm_vec4_copy ( C1, cc );
+
+    cy = ceilf ( Y1 );
+    dy = 1;
+
+    dx = fabsf ( Y2 - Y1 ) > EPS ? dy * ( X2 - X1 ) / ( Y2 - Y1 ) : 0;
+    cx = X1 + dx * ( ( float ) ceilf ( Y1 ) - Y1 );
+
+    for ( int i = 0; i < r; i++ )
+    {
+        uint8_t * c = f->l.c[ cy ];
+        VEC4_TO_U8 ( cc, c );
+
+        f->l.x[ cy ] = ceilf ( cx );
+
+        // step
+        glm_vec4_add ( cc, dc, cc );
+        cy += dy;
+        cx += dx;
+    }
+draw_v2v3:
+    if ( Y3 >= Y2 )
+    {
+        max_y = floorf ( Y3 );
+        r     = floorf ( Y3 ) - ceilf ( Y2 ) + 1;
+
+        if ( r <= 0 ) goto draw_v3v1;
+
+        glm_vec4_sub ( C3, C2, dc );
+        glm_vec4_divs ( dc, r + 1, dc );
+        glm_vec4_copy ( C2, cc );
+
+        cy = ceilf ( Y2 );
+        dy = 1;
+        dx = fabsf ( Y3 - Y2 ) > EPS ? dy * ( X3 - X2 ) / ( Y3 - Y2 ) : 0;
+        cx = X2 + dx * ( ( float ) ceilf ( Y2 ) - Y2 );
+
+        for ( int i = 0; i < r; i++ )
+        {
+            uint8_t * c = f->l.c[ cy ];
+            VEC4_TO_U8 ( cc, c );
+
+            f->l.x[ cy ] = ceilf ( cx );
+
+            // step
+            glm_vec4_add ( cc, dc, cc );
+            cy += dy;
+            cx += dx;
+        }
+    }
+    else
+    {
+        max_y = floorf ( Y2 );
+        r     = floorf ( Y2 ) - ceilf ( Y3 ) + 1;
+
+        if ( r <= 0 ) goto draw_v3v1;
+
+        glm_vec4_sub ( C3, C2, dc );
+        glm_vec4_divs ( dc, r + 1, dc );
+        glm_vec4_copy ( C2, cc );
+
+        cy = floorf ( Y2 );
+        dy = -1;
+        dx = fabsf ( Y3 - Y2 ) > EPS ? dy * ( X3 - X2 ) / ( Y3 - Y2 ) : 0;
+        cx = X2 + dx * ( ( float ) floorf ( Y2 ) - Y2 );
+
+        for ( int i = 0; i < r; i++ )
+        {
+            uint8_t * c = f->r.c[ cy ];
+            VEC4_TO_U8 ( cc, c );
+
+            f->r.x[ cy ] = floorf ( cx );
+
+            // step
+            glm_vec4_add ( cc, dc, cc );
+            cy += dy;
+            cx += dx;
+        }
+    }
+
+draw_v3v1:
+    r = floorf ( Y3 ) - ceilf ( Y1 ) + 1;
+
+    if ( r <= 0 ) goto end_draw_bounds;
+
+    glm_vec4_sub ( C1, C3, dc );
+    glm_vec4_divs ( dc, r + 1, dc );
+    glm_vec4_copy ( C3, cc );
+
+    cy = floorf ( Y3 );
+    dy = -1;
+    dx = fabsf ( Y3 - Y1 ) > EPS ? dy * ( X3 - X1 ) / ( Y3 - Y1 ) : 0;
+    cx = X3 + dx * ( ( float ) floorf ( Y3 ) - Y3 );
+
+    for ( int i = 0; i < r; i++ )
+    {
+        uint8_t * c = f->r.c[ cy ];
+        VEC4_TO_U8 ( cc, c );
+
+        f->r.x[ cy ] = floorf ( cx );
+
+        // step
+        glm_vec4_add ( cc, dc, cc );
+        cy += dy;
+        cx += dx;
+    }
+end_draw_bounds:
 
     DBuffer ** faint_ll;
-    vec4 *     curr_c;
+    icolor_t * curr_c;
     uint64_t * curr_z;
 
-    vec4  ctemp;
-    float denom, w1, w2, w3;
+    icolor_t ctemp;
 
-    denom = ( X1 - X3 ) * ( Y2 - Y3 ) - ( X2 - X3 ) * ( Y1 - Y3 );
-
-    if ( fabsf ( ( float ) denom ) < 1e-6 ) return; /* Degenerate */
-
-    float dw1x  = ( Y2 - Y3 ) / denom;
-    float dw2x  = ( Y3 - Y1 ) / denom;
-    float dw3x  = -dw1x - dw2x;
-    float y2sy3 = ( Y2 - Y3 ) / denom;
-    float y3sy1 = ( Y3 - Y1 ) / denom;
-    float x3sx2 = ( X3 - X2 ) / denom;
-    float x1sx3 = ( X1 - X3 ) / denom;
-
-    for ( int py = ymin; py <= ymax; py++ )
+    // printf ( "minimax: %d %d\n", min_y, max_y );
+    for ( int py = min_y; py <= max_y; py++ )
     {
-        int l_x = f->min_x[ py ], r_x = f->max_x[ py ];
-        /* go to current row */
-        float fx = ( l_x + 0.5f ) - X3;
-        float fy = ( py + 0.5f ) - Y3;
+        int l_x = f->l.x[ py ];
+        int r_x = f->r.x[ py ];
+        if ( l_x > r_x ) continue;
 
-        w1 = ( y2sy3 * fx + x3sx2 * fy );
-        w2 = ( y3sy1 * fx + x1sx3 * fy );
-        w3 = ( 1 - w1 - w2 );
+        // faint_ll = ( f->transparent + ( py * f->surface->w ) + l_x );
+        // curr_c = ( f->opaque_c + ( py * f->surface->w ) + l_x );
+        // curr_z   = ( f->opaque_z + ( py * f->surface->w ) + l_x );
 
-        faint_ll = ( f->transparent + ( py * f->surface->w ) + l_x );
-        curr_c   = ( f->opaque_c + ( py * f->surface->w ) + l_x );
-        curr_z   = ( f->opaque_z + ( py * f->surface->w ) + l_x );
+        curr_c = ( f->opaque_c + ( py * f->surface->w ) );
+        U8_COPY ( f->l.c[ py ], *( curr_c + l_x ) );
+        U8_COPY ( f->r.c[ py ], *( curr_c + r_x ) );
+        //  for ( int px = l_x; px <= r_x; px++ )
+        //  {
+        // if ( z_px < *curr_z ) goto l_next_pixel;
 
-        for ( int px = l_x; px <= r_x; px++ )
-        {
-            if ( w1 < 0 || w2 < 0 || w3 < 0 ) { goto l_next_pixel; }
+        // if ( cpx[ ALPHA_IDX ] >= OPAQUE_THRSHD )
+        //{
+        //     glm_vec4_copy ( cpx, *curr_c );
+        //     *curr_z = z_px;
+        // }
+        // else
+        //{
+        //     DBuffer * newBuf = getAuxDBuffer ( f );
+        //     glm_vec4_copy ( cpx, newBuf->color );
+        //     newBuf->z    = z_px;
+        //     newBuf->next = NULL;
 
-            uint64_t z_px = ( w1 * ( float ) ZI1 + w2 * ( float ) ZI2 +
-                              w3 * ( float ) ZI3 );
+        //    if ( ! ( *faint_ll ) )
+        //    {
+        //        ( *faint_ll ) = newBuf;
+        //        goto l_next_pixel;
+        //    }
+        //    while ( ( *faint_ll )->next &&
+        //            ( *faint_ll )->next->z >= z_px )
+        //    {
+        //        ( *faint_ll ) = ( *faint_ll )->next;
+        //    }
+        //    newBuf->next        = ( *faint_ll )->next;
+        //    ( *faint_ll )->next = newBuf;
+        //}
 
-            vec4 cpx;
-            glm_vec4_scale ( c[ 0 ], w1, cpx );
-            glm_vec4_scale ( c[ 1 ], w2, ctemp );
-            glm_vec4_add ( cpx, ctemp, cpx );
-            glm_vec4_scale ( c[ 2 ], w3, ctemp );
-            glm_vec4_add ( cpx, ctemp, cpx );
-            // glm_vec4_divs ( cpx, denom, cpx );
-
-            if ( z_px < *curr_z ) goto l_next_pixel;
-
-            if ( cpx[ ALPHA_IDX ] >= OPAQUE_THRSHD )
-            {
-                glm_vec4_copy ( cpx, *curr_c );
-                *curr_z = z_px;
-            }
-            else
-            {
-                DBuffer * newBuf = getAuxDBuffer ( f );
-                glm_vec4_copy ( cpx, newBuf->color );
-                newBuf->z    = z_px;
-                newBuf->next = NULL;
-
-                if ( ! ( *faint_ll ) )
-                {
-                    ( *faint_ll ) = newBuf;
-                    goto l_next_pixel;
-                }
-                while ( ( *faint_ll )->next &&
-                        ( *faint_ll )->next->z >= z_px )
-                {
-                    ( *faint_ll ) = ( *faint_ll )->next;
-                }
-                newBuf->next        = ( *faint_ll )->next;
-                ( *faint_ll )->next = newBuf;
-            }
-
-        l_next_pixel:
-            w1 += dw1x;
-            w2 += dw2x;
-            w3 += dw3x;
-
-            faint_ll++;
-            curr_c++;
-            curr_z++;
-        }
+        //   l_next_pixel:
+        //       faint_ll++;
+        //       curr_c++;
+        //       curr_z++;
+        //   }
     }
 }
 
@@ -233,44 +403,47 @@ void
 merge ( Framebuffer * f )
 {
 
-    vec4 * curr_c = f->opaque_c;
+    icolor_t * curr_c = f->opaque_c;
     // float * curr_z = f->opaque_z;
 
     uint32_t * curr_out = f->surface->pixels;
     const int  num_px   = f->surface->h * f->surface->w;
     for ( int i = 0; i < num_px; i++ )
     {
-        vec4 out_color;
-
-        glm_vec4_zero ( out_color );
-        glm_vec4_copy ( *curr_c, out_color );
-        glm_vec4_scale ( out_color, 255.0f, out_color );
-
-        __m128  color     = _mm_loadu_ps ( out_color );
-        __m128i color_int = _mm_cvtps_epi32 ( color );
-
-        color_int = _mm_packs_epi32 ( color_int, color_int );
-        color_int = _mm_packus_epi16 ( color_int, color_int );
-
-        *curr_out = _mm_cvtsi128_si32 ( color_int );
-        //  __m128  color     = _mm_loadu_ps ( out_color );
-        //  __m128i color_int = _mm_cvttps_epi32 ( color );
-
-        //  int r = _mm_extract_epi32 ( color_int, 0 );
-        //  int g = _mm_extract_epi32 ( color_int, 1 );
-        //  int b = _mm_extract_epi32 ( color_int, 2 );
-        //  int a = _mm_extract_epi32 ( color_int, 3 );
-
-        //  *curr_out = ( a << 24 ) | ( b << 16 ) | ( g << 8 ) | r;
-
-        //  uint32_t r = ( uint32_t ) ( *out_color_temp++ );
-        //  uint32_t g = ( uint32_t ) ( *out_color_temp++ );
-        //  uint32_t b = ( uint32_t ) ( *out_color_temp++ );
-        //  uint32_t a = ( uint32_t ) ( *out_color );
-        //  *curr_out = ( r ) | ( g << 8 ) | ( b << 16 ) | ( a << 24 );
+        uint8_t * c = *curr_c;
+        *curr_out =
+            ( c[ 3 ] << 24 ) | ( c[ 2 ] << 16 ) | ( c[ 1 ] << 8 ) | c[ 0 ];
 
         curr_c++;
-        // curr_z++;
         curr_out++;
     }
 }
+
+/*
+ *
+ * 'G' ??? vim user
+ ⠀⠀⠀⠀⠀⠀⠀⠀⢾⡄⠀⠘⣷⣸⣷⣄⠀⠀⠀⠀⠀⠀⠀⣀⣀⣀⣀⡀⠀⠀⠀⠀⠀⢀⣾⣿⠋⠀⠆⢀⢻⠓⢸⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠈⠳⡀⠀⠘⠿⣿⣿⣧⡀⠀⠀⠀⠺⣏⠉⠀⠀⠈⣹⠗⠀⠀⠀⢀⣾⡿⡿⠀⠀⠀⡸⣼⠀⡜⠀⠀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠑⡄⠀⠀⠹⠛⠉⠻⠷⣄⠀⠀⠈⠓⢤⡠⠞⠁⠀⠀⣠⣴⡿⠟⢠⠇⠀⠀⢀⣷⣿⣄⡇⠀⢀⠀⠀⠀⠀⠀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠑⢤⡀⠀⠀⠀⠀⠐⠦⣿⣿⣶⣄⠀⠀⠀⠀⣀⣴⣾⠿⠋⠀⠀⣼⡀⠀⢀⣾⡟⠈⣿⣷⡀⢿⡄⠀⠀⢀⣀
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠲⢄⡀⠀⠀⠀⠈⠙⠿⠿⣿⣶⡶⠾⠛⠋⠀⠀⠀⠀⢠⠏⠀⣠⠋⡿⠀⢠⣿⣿⢳⡘⣇⠀⠀⣸⣿
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⠑⠤⣀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⠏⢀⡔⠁⡼⠁⠀⠀⣿⢹⡀⣷⣹⣷⣯⢉⡛
+⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠙⢦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⢋⡴⠋⠀⡴⠁⠀⠀⠀⣿⣼⡇⠹⣿⣿⠈⠻⣭
+⠀⠀⠐⢦⣄⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⠟⠉⠀⠀⠈⠀⠀⠀⠀⠀⡿⢹⡇⠀⢿⣿⣧⠀⠖
+⠀⠀⠀⠀⢹⣷⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⡠⠚⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠰⡇⣿⠁⠀⠀⢹⡇⣇⠀
+⣀⠀⢀⣠⣾⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠐⠊⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢰⠃⣿⠀⠀⠀⠀⢻⣿⠤
+⡉⡛⠉⣿⣿⣿⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡜⢸⣏⠀⠀⠀⠀⢸⢻⣁
+⡟⠁⢀⣿⣿⠇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠈⡇⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣰⢁⢇⠃⠀⠀⠀⠀⠈⢿⠹
+⢷⣄⣾⣿⡏⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⠃⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⠃⣞⠀⠀⠀⠀⠀⠀⠀⢸⠀
+⠘⣿⣿⣿⠁⠀⠀⠀⠀⠀4uCkIn'⠀⠀⠀⠀⠀⠀⠀⠘⠀⠀⠀⠀C⠀⠀⠀⠀⠀⠀⠀⢀⠎⣼⠏⠀⠀⠀⠀⠀⠀⠀⢸⠀
+⢣⢹⣿⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⠎⣸⠃⠀⠀⠀⠀⠀⠀⠀⠀⢸⣖
+⡈⣧⢻⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢠⠋⡼⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⣿
+⡄⣻⣾⣿⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡆⠀⠀⠀⠀⠀⠀⠀⠀⠀⡠⢃⡜⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⡿
+⡇⠉⢿⡸⡆⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⡇⠀⠀⠀⠀⠀⠀⠀⢀⡜⣡⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣾⠀
+⢿⡆⠈⢻⢳⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣧⠀⠀⠀⠀⠀⠀⣠⢊⡴⠁⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣰⠇⣴
+⣿⣿⠀⠈⡎⢧⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢸⣆⠀⠀⠀⣠⢞⡴⠋⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣴⣏⣼⢏
+⣬⣿⢿⣦⡸⡄⢳⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⢀⣿⣿⣷⡶⠚⣡⠟⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣰⡾⢇⡟⢡⡏
+⠙⢿⣄⡙⢷⣿⣄⠻⣦⡀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣴⣿⡿⠛⢁⡴⠊⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⠀⣠⣾⠋⣠⠞⢀⠏⠁
+⠉⠉⠉⠉⠉⠙⠻⣦⡙⣿⣦⠀⠀⠀⠀⣀⣀⡠⢴⢒⣻⠿⠛⣉⠤⠾⠙⠉⠁⠀⠀⠀⠀⠀⠀⠀⠀⢀⣠⠤⠞⠋⠉⠉⠉⠉⠉⠉⠉⠙
+⠉⠉⠉⠉⠉⠉⠉⠉⠉⠛⠿⣷⡿⠿⠯⠴⠖⠒⣋⣩⣴⠶⠭⠤⠤⠴⠶⠾⠦⠤⠼⠶⢒⣒⣞⣉⣉⣁⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠉⠙
+ */

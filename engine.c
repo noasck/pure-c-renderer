@@ -3,6 +3,16 @@
     static int u_calls = 0;      \
     printf ( "%s called: %d times\n", func_name, ++u_calls );
 
+static inline void
+u8_4_zero ( uint8_t dst[ 4 ] )
+{
+    //*( uint32_t * ) dst = 0u;
+    dst[ 0 ] = 0u;
+    dst[ 1 ] = 0u;
+    dst[ 2 ] = 0u;
+    dst[ 3 ] = 0u;
+}
+
 DBufferPool *
 createDBufferPool ( uint32_t size )
 {
@@ -17,7 +27,7 @@ createDBufferPool ( uint32_t size )
 
     for ( uint32_t i = 0; i < size; i++ )
     {
-        glm_vec4_zero ( p->nodes[ i ].color );
+        u8_4_zero ( p->nodes[ i ].c );
         p->nodes[ i ].z    = 0;
         p->nodes[ i ].next = NULL;
     }
@@ -56,7 +66,7 @@ destroyDBufferPool ( DBufferPool * p )
 void
 cleanFramebuffer ( Framebuffer * f )
 {
-    vec4 *     c    = f->opaque_c;
+    icolor_t * c    = f->opaque_c;
     uint64_t * z    = f->opaque_z;
     DBuffer ** t    = f->transparent;
     uint32_t * s_px = f->surface->pixels;
@@ -68,7 +78,7 @@ cleanFramebuffer ( Framebuffer * f )
 
     for ( uint32_t i = 0; i < px_cnt; i = i + 1 )
     {
-        glm_vec4_zero ( *( c++ ) );
+        u8_4_zero ( *(c++) );
         *( z++ ) = 0;
     }
 
@@ -97,7 +107,7 @@ createFramebuffer ( uint32_t h, uint32_t w )
     }
     typedef DBuffer * dbuffer_ptr_t;
     U_ALLOC ( f->transparent, dbuffer_ptr_t, h * w );
-    U_ALLOC ( f->opaque_c, vec4, h * w );
+    U_ALLOC ( f->opaque_c, uint8_t, 4*h * w );
     U_ALLOC ( f->opaque_z, uint64_t, h * w );
     f->pool = NULL;
     cleanFramebuffer ( f );
@@ -105,8 +115,8 @@ createFramebuffer ( uint32_t h, uint32_t w )
     U_ALLOC ( f->l.x, int, h );
     U_ALLOC ( f->r.x, int, h );
 
-    U_ALLOC ( f->l.c, vec4, h );
-    U_ALLOC ( f->r.c, vec4, h );
+    U_ALLOC ( f->l.c, uint8_t, 4*h );
+    U_ALLOC ( f->r.c, uint8_t, 4*h );
 
     U_ALLOC ( f->l.zi, uint64_t, h );
     U_ALLOC ( f->r.zi, uint64_t, h );
